@@ -3,6 +3,7 @@ import nltk
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize, sent_tokenize
 from nltk.stem import PorterStemmer, WordNetLemmatizer
+import numpy as np
 
 nltk.download('punkt')
 nltk.download('stopwords')
@@ -29,6 +30,10 @@ class NLPModel:
         # Initialize model components (preprocessing, training, etc.)
         #self.model
         self.training_tagged = {}
+        self.sentences = []
+        self.tfidf = TfidfVectorizer(tokenizer=lambda i:i, lowercase=False)
+        self.training_tfidf = None
+        
 
         pass
 
@@ -66,23 +71,56 @@ class NLPModel:
     def train_model(self, data):
         # Train the NLP model using the provided training data and labels
 
+        from sklearn.feature_extraction.text import TfidfVectorizer
+
+        # Tokenize all sentences at once
+        
+        training_tagged = {}
+        sentences = []
+
         for data in data_json:
             text = data["text"]
             answer = data["answer"]
 
-            preprocessed_data = model.preprocess_text(text)
+            preprocessed_sentences = self.preprocess_text(text)
 
-            if answer in self.training_tagged:
-                self.training_tagged[answer].append(preprocessed_data)
-            else:
-                self.training_tagged[answer] = preprocessed_data
+            for sentence in preprocessed_sentences:
+                training_tagged.append((sentence, answer))
 
-        
-        print(self.training_tagged)
+        flattened_sentences = [sentence[0] for sentence in training_tagged]
+
+        # Fit and transform the TF-IDF vectorizer
+        self.training_tfidf = self.tfidf.fit_transform(flattened_sentences)
+
+            
+
+
+    def save(self, file_path):
+        pass
+
     
     def predict(self, input_data):
         # Use the trained model to make predictions on input_data
         # Return predictions and confidence levels
+
+        similarities = []
+
+        new_text_processed = self.preprocess_text(input_data)
+        training_text_tfidf = self.training_tfidf
+
+        for sentence in new_text_processed:
+            sentence_tfidf = self.tfidf.transform(sentence)
+            similarities.append(cosine_similarity(new_text_tfidf, sentence_tfidf))
+
+
+        sentences = np.mean(similarities)
+
+        closest_index = similarities.argmax()
+        
+
+
+
+
         pass
     
     def evaluate(self, test_data, labels):
