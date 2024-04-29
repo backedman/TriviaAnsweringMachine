@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 import json
 from tqdm import tqdm
+from collections import defaultdict
 
 
 
@@ -25,12 +26,10 @@ class QuizBowlModel:
         as it will increase latency severely. 
         """
         
-        self.categories = ['Geography', 'Religion', 'Philosophy', 'Trash', 'Mythology', 'Literature', 'Science', 'Social Science', 'History', 'Current Events', 'Fine Arts']
+        self.categories = ['Geography', 'Religion', 'Philosophy', 'Trash','Mythology', 'Literature','Science', 'Social Science', 'History', 'Current Events', 'Fine Arts', 'ALL']
         self.tfidf_models = [None for _ in range(len(self.categories) + 1)]
         self.qc_model = qc.TextClassificationModel.load_model("models/categorizer")
-        
-        print(clear)
-        
+                
         self.load_tfidf_models(clear=clear)
 
 
@@ -92,11 +91,15 @@ class QuizBowlModel:
         training_data = [[] for _ in range(len(self.categories) + 1)]
 
         # Create a tqdm progress bar for data processing
-        with tqdm(total=len(data)) as pbar:
+        '''with tqdm(total=len(data)) as pbar:
             # Go through data
             for data_point in data:
                 text = data_point["text"]
                 answer = data_point["answer"]
+                categories = data_point["category"]
+                
+                for category in categories:
+                    
                 
                 if(text == ""):
                     continue
@@ -115,9 +118,53 @@ class QuizBowlModel:
                 # Update progress bar
                 pbar.update(1)
 
-        print("Category-tagging complete.")
+        print("Category-tagging complete.")'''
+        
+        with tqdm(total=len(data)) as pbar:
+            for data_point in data:
+                text = data_point["text"]
+                answer = data_point["answer"]
+                categories = data_point["category"]
+                #print(categories)
+                #print(data_point)
+                
+                for category in categories:
+                    
+                    category_ind = self.categories.index(category)
+                            
+                    training_data[category_ind].append({"text": text, "answer": answer})
+                    
+                    if(len(training_data[category_ind]) == 10000):
+                        #print("here")
+                        self.tfidf_models[category_ind].process_data(training_data[category_ind])        
+                        
+                        training_data[category_ind] = []
+                    
+                # Update progress bar
+                pbar.update(1)
+                    
+        for ind,data in enumerate(training_data):
+            
+            self.tfidf_models[ind].process_data(data)
+                        
+            training_data[self.categories.index(category)] = []
+        
+        print("TRAINING DATA")
+        with tqdm(total=len(self.categories)) as pbar:
+            for category in range(len(self.categories)):
+                # Train model
+                self.tfidf_models[category].train_model()
+                
+                # Save model
+                self.tfidf_models[category].save(f"models/{self.categories[category]}_tfidf.pkl")
+                
+                # Unload model
+                self.tfidf_models[category] = None
+                training_data[category] = None
+                
+                pbar.update(1)
 
-        # Create a tqdm progress bar for model training
+        '''# Create a tqdm progress bar for model training
         with tqdm(total=len(self.categories)) as pbar:
             # Iterate over categories
             for category, category_data in enumerate(training_data[:-1]):
@@ -142,11 +189,12 @@ class QuizBowlModel:
                 
                 # Unload model
                 self.tfidf_models[category] = None
+                training_data[category] = None
                 
                 #garbage collection/free processes
                 
                 # Update progress bar
-                pbar.update(1)
+                pbar.update(1)'''
 
         print("Training complete.")
 
@@ -173,8 +221,10 @@ class QuizBowlModel:
                 max_confidence = confidence
                 max_answer = answer
                 max_category = category
+                
+            break
             
-        max_confidence, max_answer = selected_model.predict(input_data)
+        #max_confidence, max_answer = selected_model.predict(input_data)
         print("Prediction for category", self.categories[category], ":", max_answer, "with confidence", max_confidence)
         
         return (max_confidence, max_answer)

@@ -3,6 +3,13 @@ from bs4 import BeautifulSoup
 import re
 from tqdm import tqdm  # Import tqdm for progress tracking
 import sys
+import question_categorizer as qc
+import numpy as np
+from question_categorizer import TextClassificationModel
+
+qc_model = qc.TextClassificationModel.load_model("models/categorizer")
+
+categories = ['Geography', 'Religion', 'Philosophy', 'Trash','Mythology', 'Literature','Science', 'Social Science', 'History', 'Current Events', 'Fine Arts']
 
 def remove_newline(string):
     return re.sub('\n+', ' ', string)
@@ -11,13 +18,21 @@ def clean_text(text, answer):
     # Remove HTML tags
     text = re.sub(r'<.*?>', '', text)
     
-    # Remove special characters and digits
-    #text = re.sub(r'[^a-zA-Z.-\s]', '', text)
+    #text = re.sub(r'?','.',text)
+    text = text.replace('?','.')
+    
+    # Clean the text further
+    text = re.sub(r'[^a-zA-Z.\s-]', '', text)
+    
+    
     
     # Remove answer from text
     try:
         # Preprocess the answer to replace underscores with spaces
         processed_answer = answer.replace('_', ' ')
+        
+        # Remove parentheses from the processed answer
+        processed_answer = re.sub(r'\([^)]*\)', '', processed_answer)
         
         # Replace all instances of the processed answer with an empty string, ignoring case
         text = re.sub(re.escape(processed_answer), '', text, flags=re.IGNORECASE)
@@ -56,12 +71,26 @@ def process_data():
             # Preprocess the text
             soup = BeautifulSoup(question, 'html.parser')
             clean_question = ''.join(soup.findAll(text=True, recursive=False))
+            
+            question_category = []
+            
+            # Get category from qc_model
+            prediction = qc_model.predict(question)
+            predictions = np.argwhere(prediction >= 1.5)[1]
+            
+            for prediction_ind in predictions:
+                # Store data in array with respective index
+                question_category.append(categories[prediction_ind])
+                
+            question_category.append('ALL')
+            
+            
 
             training_entry = {
                 "text": clean_question,
-                "answer": answer#,
+                "answer": answer,#,
                 # Mohit, put categorizing code here
-                #"category": "Unknown"
+                "category": question_category
             }
 
             training_data.append(training_entry)
@@ -78,13 +107,25 @@ def process_data():
             text = remove_newline(text)
             text = clean_text(text, page)
             
+            question_category = []
+            
+            # Get category from qc_model
+            prediction = qc_model.predict(text)
+            predictions = np.argwhere(prediction >= 1.5)[1]
+            
+            for prediction_ind in predictions:
+                # Store data in array with respective index
+                question_category.append(categories[prediction_ind])
+                
+            question_category.append('ALL')
+            
 
 
             training_entry = {
                 "text": text,
-                "answer": page#,
+                "answer": page,
                 # Mohit, put categorizing code here
-                #"category": "Unknown"
+                "category": question_category
             }
 
             training_data.append(training_entry)

@@ -7,11 +7,14 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 import os
+import math
 import pickle
 import joblib
 import multiprocessing
 from concurrent.futures import ProcessPoolExecutor
 from tqdm import tqdm  # Import tqdm for progress tracking
+from collections import defaultdict
+
 
 nltk.download('punkt')
 nltk.download('stopwords')
@@ -46,6 +49,7 @@ class NLPModel:
         
         self.flattened_sentences = []
         self.training_tagged = []
+        self.answers = []
         
         
         
@@ -58,7 +62,7 @@ class NLPModel:
         sentences = sent_tokenize(text)
         
         preprocessed_sentences = []
-        batch_size = 10  # Adjust the batch size based on your system's capabilities
+        batch_size = 50  # Adjust the batch size based on your system's capabilities
         for i in range(0, len(sentences), batch_size):
             batch_sentences = sentences[i:i + batch_size]
             batch_words = [word_tokenize(sentence) for sentence in batch_sentences]
@@ -83,26 +87,48 @@ class NLPModel:
         return preprocessed_sentences
     
     def process_data(self, data_json):
-        print("Processing data in parallel...")
-        batch_size = 10  # Experiment with different batch sizes
-        num_processes = int(multiprocessing.cpu_count()/2)  # Utilize more processes
-        print(num_processes)
+        #print("Processing data in parallel...")
+        batch_size = 50  # Experiment with different batch sizes
+        num_processes = int(multiprocessing.cpu_count()*2)  # Utilize more processes
+        #print(num_processes)
         batches = [data_json[i:i + batch_size] for i in range(0, len(data_json), batch_size)]
         
-        print('batches')
+        #print('batches')
 
-        self.training_tagged = []  # Initialize or clear self.training_tagged
+        #training_tagged = []  # Initialize or clear self.training_tagged
+        sentence_answers = []
 
         with ProcessPoolExecutor(max_workers=num_processes) as executor:
-            results = list(tqdm(executor.map(self.process_data_batch, batches), total=len(batches)))
+            results = list(executor.map(self.process_data_batch, batches))
+            
+        #with multiprocessing.Pool() as pool:
+        #results = []
+        #for batch in batches:
+        results.append(self.process_data_batch(batch))
 
         for batch_result in results:
             for result in batch_result:
-                self.training_tagged.extend(result)
+                sentence_answers.extend(result)
             #print("here")
+            
+        # Create a dictionary to group sentences by answer
+        answer_groups = defaultdict(list)
 
-        self.flattened_sentences = [x[0] for x in self.training_tagged]
-        print("Data processing complete.")
+        # Iterate through each (sentence, answer) pair in batch_results
+        for sentence, answer in sentence_answers:
+            answer_groups[answer].extend(sentence)
+            
+        #print(list(answer_groups.items())[0])
+
+        # Create a new list with sentences grouped by answer
+        sentence_answers.extend([(sentence,answer) for sentence, answer in answer_groups.items()])
+
+        self.flattened_sentences.extend([x[0] for x in sentence_answers])
+        self.training_tagged.extend([x[1] for x in sentence_answers])
+        
+        
+        
+        #print("Data processing complete.")
 
     def process_data_batch(self, batch):
         batch_results = []
@@ -114,8 +140,12 @@ class NLPModel:
             answer = data["answer"]
             preprocessed_sentences = self.preprocess_text(text)
             training_tagged = [(sentence, answer) for sentence in preprocessed_sentences]
+            
             #print(training_tagged)
             batch_results.append(training_tagged)
+            
+        #create another list where instead, the "sentence" of elements with the same answer are appended with each other
+            
         return batch_results
 
     def train_model(self):
@@ -125,6 +155,7 @@ class NLPModel:
         if(self.flattened_sentences):
             self.training_tfidf = self.tfidf.fit_transform(self.flattened_sentences)
             self.flattened_sentences = []
+            #self.
             
         #print(self.training_tfidf)
         #print(self.training_tagged)
@@ -156,25 +187,64 @@ class NLPModel:
         return self
 
     
+
     def predict(self, input_data):
-        # Use the trained model to make predictions on input_data
-        # Return predictions and confidence levels
+        # Define the similarity threshold
 
         similarities = []
+        answers = []
 
         new_text_processed = self.preprocess_text(input_data)
-        training_text_tfidf = self.training_tfidf
+        new_text_processed_tfidf = self.tfidf.transform(new_text_processed)
+        training_tfidf = self.training_tfidf
 
-        for sentence in new_text_processed:
-            sentence_tfidf = self.tfidf.transform([sentence])
-
-            similarities.append(cosine_similarity(sentence_tfidf,training_text_tfidf))
-
-        sentences = np.mean(similarities, axis=0)
-
-        closest_index = sentences.argmax()
+        sentence_similarities = cosine_similarity(new_text_processed_tfidf, training_tfidf)
+        
                 
-        return (sentences.max(),self.training_tagged[closest_index][1])
+        for sentence_similarity in sentence_similarities:
+            
+            similarities_weight = defaultdict(int)
+            similarities_max = defaultdict(int)
+            
+            #condense answers with multiple documents
+            for (_, answer), similarity in zip(self.training_tagged, sentence_similarity):
+
+                similarities_max[answer] = max(similarities_max[answer],similarity)
+            
+                        
+            if not answers:
+                answers.extend(list(similarities_max.keys()))
+                        
+            
+            similarities.append(list(similarities_max.values()))
+            
+        #print(similarities)
+        sentences = np.sum(similarities, axis=0)
+
+        #closest_index = sentences.argmax()
+                
+        #return (sentences.max(),answers[closest_index])
+
+        # Sort the answers by their adjusted weights in descending order
+        sorted_answers = sentences.argsort()[::-1]
+        
+        predictions = []
+
+        
+        for ind in sorted_answers[:60]:
+            
+            answer = answers[ind]
+            weight = sentences[ind]
+            
+            predictions.append((answer, weight))
+
+        print(predictions)
+        return predictions
+
+        
+        
+                        
+    #return (sentences.max(),self.training_tagged[closest_index])
 
 
 
