@@ -264,10 +264,14 @@ if __name__ == "__main__":
         
 
     if flags.data:
-        with open(flags.data, 'r') as data_file:
-            data_json = json.load(data_file)
+        
+        data_json = []
+        
+        for data in flags.data:
+            with open(flags.data, 'r') as data_file:
+                data_json.extend(json.load(data_file))
 
-            model.train(data_json)
+                model.train(data_json)
             #print(model.predict("My name is bobby, bobby newport. your name is jeff?"))
             #model.save("model.pkl")
 
