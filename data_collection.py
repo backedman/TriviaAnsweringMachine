@@ -51,22 +51,29 @@ def process_data():
         jeopardy_data = json.load(f)
 
     wiki_files = [
-        "JEOPARDY_QUESTIONS1.json",
+        "wiki_page_text.json",
+        "wiki_text_2.json"
+    ]
+    
+    question_files = ["JEOPARDY_QUESTIONS1.json",
         "qadata4.json",
         "qadata.json",
-        "wiki_page_text.json",
         "qadata2.json",
         "qadata5.json",
         "quizbowl_2021_and_prior_RAW.json",
         "qadata3.json",
         "qadata6.json",
-        "quizbowl_2021_standardized_answers.json",
-        "wiki_text_2.json"
-    ]
+        "quizbowl_2021_standardized_answers.json"]
+    
     wiki_data = []
+    
     for file_path in wiki_files:
         with open('data/' + file_path, "r") as f:
             wiki_data.extend(json.load(f))
+            
+    for file_path in question_files:
+        with open('data/' + file_path, "r") as f:
+            jeopardy_data.extend(json.load(f))
 
     with open("data/training_data.json", "w") as f:
         training_data = []
