@@ -66,6 +66,7 @@ def process_data():
         "quizbowl_2021_standardized_answers.json"]
     
     wiki_data = []
+    question_data = []
     
     for file_path in wiki_files:
         with open('data/' + file_path, "r") as f:
@@ -73,7 +74,7 @@ def process_data():
             
     for file_path in question_files:
         with open('data/' + file_path, "r") as f:
-            jeopardy_data.extend(json.load(f))
+            question_data.extend(json.load(f))
 
     with open("data/training_data.json", "w") as f:
         training_data = []
@@ -145,6 +146,40 @@ def process_data():
             }
 
             training_data.append(training_entry)
+
+        print("Processing Misc data...")
+        for entry in tqdm(question_data):
+            answer = str(entry["answer"])
+            text = entry["text"]
+            
+            if(text == ""):
+                continue
+            
+            text = remove_newline(text)
+            text = clean_text(text, answer)
+            
+            question_category = []
+            
+            # Get category from qc_model
+            prediction = qc_model.predict(text)
+            predictions = np.argwhere(prediction >= 1.5)[1]
+            
+            for prediction_ind in predictions:
+                # Store data in array with respective index
+                question_category.append(categories[prediction_ind])
+                
+            question_category.append('ALL')
+            
+
+
+            training_entry = {
+                "text": text,
+                "answer": page,
+                # Mohit, put categorizing code here
+                "category": question_category
+            }
+            
+            
 
         json.dump(training_data, f, indent=4)
         
