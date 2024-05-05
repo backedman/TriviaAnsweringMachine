@@ -47,23 +47,15 @@ def clean_text(text, answer):
     return text.strip()
 
 def process_data():
-    with open("data/JEOPARDY_QUESTIONS1.json", "r") as f:
-        jeopardy_data = json.load(f)
+    #with open("data/JEOPARDY_QUESTIONS1.json", "r") as f:
+    #    jeopardy_data = json.load(f)
+    jeopardy_data = []
 
     wiki_files = [
-        "wiki_page_text.json",
-        "wiki_text_2.json"
     ]
     
-    question_files = ["JEOPARDY_QUESTIONS1.json",
-        "qadata4.json",
-        "qadata.json",
-        "qadata2.json",
-        "qadata5.json",
-        "quizbowl_2021_and_prior_RAW.json",
-        "qadata3.json",
-        "qadata6.json",
-        "quizbowl_2021_standardized_answers.json"]
+    question_files = [
+        "qadata.json"]
     
     wiki_data = []
     question_data = []
@@ -75,6 +67,8 @@ def process_data():
     for file_path in question_files:
         with open('data/' + file_path, "r") as f:
             question_data.extend(json.load(f))
+            
+    #print(question_data)
 
     with open("data/training_data.json", "w") as f:
         training_data = []
@@ -149,10 +143,11 @@ def process_data():
 
         print("Processing Misc data...")
         for entry in tqdm(question_data):
+            
             answer = str(entry["answer"])
             text = entry["text"]
             
-            if(text == ""):
+            if(text == "" or answer == ""):
                 continue
             
             text = remove_newline(text)
@@ -161,8 +156,13 @@ def process_data():
             question_category = []
             
             # Get category from qc_model
-            prediction = qc_model.predict(text)
-            predictions = np.argwhere(prediction >= 1.5)[1]
+            try:
+              prediction = qc_model.predict(text)
+              predictions = np.argwhere(prediction >= 1.5)[1]
+            except:
+              print("answer: " + str(answer))
+              print("text:" + str(text))
+              continue
             
             for prediction_ind in predictions:
                 # Store data in array with respective index
@@ -174,10 +174,12 @@ def process_data():
 
             training_entry = {
                 "text": text,
-                "answer": page,
+                "answer": answer,
                 # Mohit, put categorizing code here
                 "category": question_category
             }
+            
+            training_data.append(training_entry)
             
             
 
